@@ -23,12 +23,6 @@ Build a release:
 cmake --workflow release
 ```
 
-Build the Model Checking Competition variant:
-
-```bash
-cmake --workflow mcc
-```
-
 ## Mac OS
 
 Install Xcode through the App Store, then install dependencies:
@@ -63,7 +57,6 @@ cmake --workflow win64-release
 | Workflow | Purpose | Build directory |
 | --- | --- | --- |
 | `release` | Release build | `build-release` |
-| `mcc` | Model Checking Competition build | `build-mcc` |
 | `debug` | Debug build | `build-debug` |
 | `test` | Release build and tests | `build-test` |
 | `win64-release` | Windows cross-compiled release | `build-win64-release` |
