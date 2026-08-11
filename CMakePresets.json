@@ -22,6 +22,7 @@
 			"binaryDir": "${sourceDir}/build-${presetName}",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
+				"VERIFYPN_GetDependencies": "ON",
 				"VERIFYPN_Static": "ON",
 				"VERIFYPN_MC_Simplification": "OFF",
 				"VERIFYPN_TEST": "OFF"
@@ -36,6 +37,7 @@
 			"binaryDir": "${sourceDir}/build-${presetName}",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Debug",
+				"VERIFYPN_GetDependencies": "ON",
 				"VERIFYPN_Static": "OFF",
 				"VERIFYPN_MC_Simplification": "OFF",
 				"VERIFYPN_TEST": "OFF"
@@ -50,6 +52,7 @@
 			"binaryDir": "${sourceDir}/build-${presetName}",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
+				"VERIFYPN_GetDependencies": "ON",
 				"VERIFYPN_Static": "OFF",
 				"VERIFYPN_MC_Simplification": "OFF",
 				"VERIFYPN_TEST": "ON"
@@ -64,6 +67,7 @@
 			"toolchainFile": "${sourceDir}/toolchain-x86_64-w64-mingw32.cmake",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
+				"VERIFYPN_GetDependencies": "ON",
 				"VERIFYPN_Static": "ON",
 				"VERIFYPN_MC_Simplification": "OFF",
 				"VERIFYPN_TEST": "OFF"
