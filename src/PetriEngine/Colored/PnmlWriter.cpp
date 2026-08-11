@@ -330,7 +330,7 @@ namespace PetriEngine {
                     const std::string& start = c->getColorType()->operator[](size_t{0}).getColorName();
                     const std::string& end = c->getColorType()->operator[](
                             c->getColorType()->size() - 1).getColorName();
-                    _out << increaseTabs() << "<finiteintrangeconstant value=\"" << c->getColorName() << "\">\n>";
+                    _out << increaseTabs() << "<finiteintrangeconstant value=\"" << c->getColorName() << "\">\n";
                     _out << increaseTabs() << "<finiteintrange start=\"" << start << "\" end=\"" << end << "\"/>\n";
                     _out << decreaseTabs() << "</finiteintrangeconstant>\n";
                 } else {
