@@ -457,6 +457,7 @@ namespace PetriEngine { namespace PQL {
 
     void EvaluateAndSetVisitor::_accept(ShallowCondition *element) {
         Visitor::visit(this, element->getCompiled());
+        element->setSatisfied(_return_value);
     }
 
     int64_t evaluate(Expr *element, const EvaluationContext &context) {
