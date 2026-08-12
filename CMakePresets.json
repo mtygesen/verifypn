@@ -23,7 +23,7 @@
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
 				"VERIFYPN_GetDependencies": "ON",
-				"VERIFYPN_Static": "OFF",
+				"VERIFYPN_Static": "ON",
 				"VERIFYPN_MC_Simplification": "ON",
 				"VERIFYPN_TEST": "OFF"
 			}
