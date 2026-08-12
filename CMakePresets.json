@@ -23,19 +23,9 @@
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
 				"VERIFYPN_GetDependencies": "ON",
-				"VERIFYPN_Static": "ON",
-				"VERIFYPN_MC_Simplification": "OFF",
-				"VERIFYPN_TEST": "OFF"
-			}
-		},
-		{
-			"name": "mcc",
-			"displayName": "Model Checking Competition",
-			"description": "Configure Model Checking Competition build",
-			"inherits": "release",
-			"cacheVariables": {
 				"VERIFYPN_Static": "OFF",
-				"VERIFYPN_MC_Simplification": "ON"
+				"VERIFYPN_MC_Simplification": "ON",
+				"VERIFYPN_TEST": "OFF"
 			}
 		},
 		{
@@ -98,20 +88,6 @@
 		{
 			"name": "release",
 			"configurePreset": "release"
-		},
-		{
-			"name": "mcc-deps",
-			"configurePreset": "mcc",
-			"targets": [
-				"ptrie-ext",
-				"rapidxml-ext",
-				"spot-ext",
-				"glpk-ext"
-			]
-		},
-		{
-			"name": "mcc",
-			"configurePreset": "mcc"
 		},
 		{
 			"name": "debug-deps",
@@ -199,24 +175,6 @@
 				{
 					"type": "build",
 					"name": "debug"
-				}
-			]
-		},
-		{
-			"name": "mcc",
-			"displayName": "Model Checking Competition Workflow",
-			"steps": [
-				{
-					"type": "configure",
-					"name": "mcc"
-				},
-				{
-					"type": "build",
-					"name": "mcc-deps"
-				},
-				{
-					"type": "build",
-					"name": "mcc"
 				}
 			]
 		},
