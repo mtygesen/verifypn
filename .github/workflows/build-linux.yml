@@ -29,6 +29,12 @@ jobs:
         GCC_PREFIX=$(brew --prefix "gcc@${GCC_VERSION}")
         test -x "$GCC_PREFIX/bin/gcc-${GCC_VERSION}"
         test -x "$GCC_PREFIX/bin/g++-${GCC_VERSION}"
+        GCC="$GCC_PREFIX/bin/gcc-${GCC_VERSION}"
+        ATOMIC_LIBRARY=$("$GCC" -print-file-name=libatomic.a)
+        test -f "$ATOMIC_LIBRARY"
+        ATOMIC_ASNEEDED="${ATOMIC_LIBRARY%/*}/libatomic_asneeded.a"
+        [[ -e "$ATOMIC_ASNEEDED" || -L "$ATOMIC_ASNEEDED" ]] || ln -s "$ATOMIC_LIBRARY" "$ATOMIC_ASNEEDED"
+        printf 'int main(void) { return 0; }\n' | "$GCC" -flto -fuse-linker-plugin -x c - -o /tmp/gcc-lto-check
         echo "$GCC_PREFIX/bin" >> "$GITHUB_PATH"
 
     - name: Build Release
