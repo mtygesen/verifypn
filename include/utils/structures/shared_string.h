@@ -14,6 +14,7 @@
 #include <string>
 #include <memory>
 #include <algorithm>
+#include <cstdint>
 
 typedef const std::string const_string;
 typedef std::shared_ptr<const_string> shared_const_string;
@@ -45,4 +46,3 @@ typedef std::unordered_set<shared_const_string, shared_ops<const_string>, shared
 
 
 #endif /* SHARED_STRING_H */
-
