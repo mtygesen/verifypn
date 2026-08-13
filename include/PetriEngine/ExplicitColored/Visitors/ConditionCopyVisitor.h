@@ -256,7 +256,7 @@ namespace PetriEngine::ExplicitColored {
         }
 
         void _accept(const PQL::MinusExpr *element) override {
-            visit(this, element);
+            visit(this, (*element)[0]);
             _copiedExpr = std::make_shared<PQL::MinusExpr>(_copiedExpr);
         }
 
