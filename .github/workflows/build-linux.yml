@@ -23,7 +23,13 @@ jobs:
         GCC_VERSION=$(sed -nE 's/^set\(DEFAULT_GCC_VERSION ([0-9]+)\)$/\1/p' CMakeLists.txt)
         [[ $GCC_VERSION =~ ^[0-9]+$ ]]
         sudo apt update
-        sudo apt install -f flex bison libboost-all-dev ninja-build "gcc-${GCC_VERSION}" "g++-${GCC_VERSION}"
+        sudo apt install -f flex bison libboost-all-dev ninja-build
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        brew install "gcc@${GCC_VERSION}"
+        GCC_PREFIX=$(brew --prefix "gcc@${GCC_VERSION}")
+        test -x "$GCC_PREFIX/bin/gcc-${GCC_VERSION}"
+        test -x "$GCC_PREFIX/bin/g++-${GCC_VERSION}"
+        echo "$GCC_PREFIX/bin" >> "$GITHUB_PATH"
 
     - name: Build Release
       run: cmake --workflow release
