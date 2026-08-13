@@ -32,11 +32,13 @@
 #include "QueryParser.h"
 #include "PetriEngine/PQL/Contexts.h"
 
+namespace PetriEngine { class ColoredPetriNetBuilder; }
+
 using namespace PetriEngine::PQL;
 
 class QueryXMLParser {
 public:
-    QueryXMLParser(shared_string_set& string_set);
+    QueryXMLParser(shared_string_set& string_set, const PetriEngine::ColoredPetriNetBuilder* coloredNet = nullptr);
     ~QueryXMLParser();
 
     std::vector<QueryItem>  queries;
@@ -53,9 +55,11 @@ private:
     Condition_ptr parseBooleanFormula(rapidxml::xml_node<>*  element);
     Expr_ptr parseIntegerExpression(rapidxml::xml_node<>*  element);
     shared_const_string parsePlace(rapidxml::xml_node<>*  element);
+    std::string parseColorExpression(rapidxml::xml_node<>* element);
+
     void fatal_error(const std::string& token);
     shared_string_set& _string_set;
+    const PetriEngine::ColoredPetriNetBuilder* _coloredNet;
 };
 
 #endif /* QUERYXMLPARSER_H */
-

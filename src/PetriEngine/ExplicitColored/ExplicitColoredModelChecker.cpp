@@ -5,6 +5,7 @@
 #include <PetriEngine/ExplicitColored/ColorIgnorantPetriNetBuilder.h>
 #include <PetriEngine/ExplicitColored/Algorithms/ExplicitWorklist.h>
 #include <PetriEngine/PQL/Evaluation.h>
+#include <PetriEngine/PQL/ContainsVisitor.h>
 #include <utils/NullStream.h>
 #include <sstream>
 #include <PetriEngine/ExplicitColored/Algorithms/FireabilitySearch.h>
@@ -79,6 +80,14 @@ namespace PetriEngine::ExplicitColored {
         if (!isReachability(query)) {
             return Result::UNKNOWN;
         }
+
+        // Color-ignorant LP cannot correctly evaluate queries targeting specific unfolded color instances.
+        ContainsVisitor<PQL::UnfoldedIdentifierExpr> hasColoredSelector;
+        PQL::Visitor::visit(hasColoredSelector, query);
+        if (hasColoredSelector.does_contain()) {
+            return Result::UNKNOWN;
+        }
+
         auto queryCopy = ConditionCopyVisitor::copyCondition(query);
         ColorIgnorantPetriNetBuilder ignorantBuilder(_stringSet);
         std::stringstream pnmlModelStream {pnmlModel};
