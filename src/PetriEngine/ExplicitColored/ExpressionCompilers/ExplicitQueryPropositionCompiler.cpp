@@ -164,6 +164,7 @@ namespace PetriEngine::ExplicitColored {
         }
     private:
         struct PlaceValue {
+            PlaceValue(Place_t place, Color_t color) : place(place), color(color) {}
             Place_t place;
             Color_t color;
         };
