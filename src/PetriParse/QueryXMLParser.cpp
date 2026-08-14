@@ -491,7 +491,6 @@ Expr_ptr QueryXMLParser::parseIntegerExpression(rapidxml::xml_node<>*  element) 
             auto colorExpr = it->first_node("color-expression");
             Expr_ptr id;
             if (colorExpr) {
-                auto colorId = parseColorExpression(colorExpr);
                 if (!_coloredNet) {
                     throw base_error("Colored query requires a parsed colored model");
                 }
@@ -501,9 +500,10 @@ Expr_ptr QueryXMLParser::parseIntegerExpression(rapidxml::xml_node<>*  element) 
                     throw base_error("Unable to resolve colored place ", *placeName);
                 }
 
-                const auto* color = (*_coloredNet->places()[place->second].type)[colorId];
+                const auto* placeColorType = _coloredNet->places()[place->second].type;
+                const auto* color = parseColorExpression(colorExpr, placeColorType);
                 if (!color) {
-                    throw base_error("Unable to resolve color ", colorId, " for place ", *placeName);
+                    throw base_error("Unable to resolve color for place ", *placeName);
                 }
 
                 auto combinedName = std::make_shared<const_string>(*placeName + "_" + std::to_string(color->getId()));
@@ -577,7 +577,7 @@ Expr_ptr QueryXMLParser::parseIntegerExpression(rapidxml::xml_node<>*  element) 
         if(expr != nullptr)
             return std::make_shared<PathSelectExpr>(name->value(), expr);
     }
-    assert(false);
+    fatal_error(elementName);
     return nullptr;
 }
 
@@ -589,18 +589,69 @@ shared_const_string QueryXMLParser::parsePlace(rapidxml::xml_node<>* element) {
     return std::make_shared<const_string>(std::move(tmp));
 }
 
-std::string QueryXMLParser::parseColorExpression(rapidxml::xml_node<>* element) {
-    auto child = element->first_node();
-    if (!child || strcmp(child->name(), "color") != 0) {
-        throw base_error("Expected color in color_expression");
+const PetriEngine::Colored::Color* QueryXMLParser::parseColorExpression(rapidxml::xml_node<>* element, const PetriEngine::Colored::ColorType* type) {
+    if (!element) {
+        throw base_error("Missing color_expression element");
     }
 
-    auto* id = child->first_attribute("id");
-    if (!id || !*id->value()) {
-        throw base_error("Expected non-empty color id in color_expression");
+    if (strcmp(element->name(), "color-expression") == 0) {
+        auto child = element->first_node();
+        if (!child) {
+            throw base_error("Empty color_expression");
+        }
+        
+        return parseColorExpression(child, type);
     }
 
-    return id->value();
+    if (strcmp(element->name(), "color") == 0) {
+        auto* id = element->first_attribute("id");
+        if (!id || !*id->value()) {
+            throw base_error("Expected non-empty color id in color_expression");
+        }
+
+        if (!type) {
+            throw base_error("Cannot resolve color without color type");
+        }
+
+        const auto* color = (*type)[id->value()];
+        if (!color) {
+            throw base_error("Unable to resolve color '", id->value(), "' for color type '", type->getName(), "'");
+        }
+
+        return color;
+    }
+
+    if (strcmp(element->name(), "tuple") == 0) {
+        if (!type || !type->isProduct()) {
+            throw base_error("Tuple color expression used for non-product color type '", type ? type->getName() : "null", "'");
+        }
+
+        const auto* productType = dynamic_cast<const PetriEngine::Colored::ProductType*>(type);
+        std::vector<const PetriEngine::Colored::Color*> tupleColors;
+        size_t idx = 0;
+        for (auto child = element->first_node(); child; child = child->next_sibling()) {
+            if (idx >= productType->getConstituentsSizes().size()) {
+                throw base_error("Too many components in tuple for product type '", productType->getName(), "'");
+            }
+
+            const auto* nestedType = productType->getNestedColorType(idx);
+            tupleColors.push_back(parseColorExpression(child, nestedType));
+            ++idx;
+        }
+
+        if (tupleColors.size() != productType->getConstituentsSizes().size()) {
+            throw base_error("Too few components in tuple for product type '", productType->getName(), "'");
+        }
+
+        const auto* color = productType->getColor(tupleColors);
+        if (!color) {
+            throw base_error("Unable to resolve tuple color in product type '", productType->getName(), "'");
+        }
+
+        return color;
+    }
+
+    throw base_error("Expected color or tuple in color_expression, found '", element->name(), "'");
 }
 
 void QueryXMLParser::printQueries(size_t i) {

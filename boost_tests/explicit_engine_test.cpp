@@ -60,6 +60,17 @@ BOOST_AUTO_TEST_CASE(PhilosophersColoredQueryFromXml, * utf::timeout(5)) {
     BOOST_TEST(checker.checkQuery(queries[0], options) == ExplicitColoredModelChecker::Result::SATISFIED);
 }
 
+BOOST_AUTO_TEST_CASE(TokenRingColoredQueryFromXml, * utf::timeout(5)) {
+    auto [queries, querynames, sset, options] = load_explicit(
+        "/models/explicit-engine/token_ring_color_query.pnml",
+        "/models/explicit-engine/token_ring_color_query.xml",
+        {0}
+    );
+    options.trace = TraceLevel::None;
+    ExplicitColoredModelChecker checker(sset, std::cout);
+    BOOST_TEST(checker.checkQuery(queries[0], options) == ExplicitColoredModelChecker::Result::SATISFIED);
+}
+
 BOOST_AUTO_TEST_CASE(ColoredQueryUsesExplicitTupleEncoding) {
     Colored::ColorType first{"first"};
     first.addColor("a0");
