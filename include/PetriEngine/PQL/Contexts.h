@@ -116,9 +116,11 @@ namespace PetriEngine {
 
             /** Create evaluation context, this doesn't take ownership */
             EvaluationContext(const MarkVal* marking,
-                    const PetriNet* net) {
+                    const PetriNet* net,
+                    size_t traces = 1) {
                 _marking = marking;
                 _net = net;
+                _traces = traces;
             }
 
             EvaluationContext() {};
@@ -139,10 +141,15 @@ namespace PetriEngine {
                 _offset = i;
             }
 
+            size_t traces() const {
+                return _traces;
+            }
+
         private:
             const MarkVal* _marking = nullptr;
             const PetriNet* _net = nullptr;
             size_t _offset = 0;
+            size_t _traces = 1;
         };
 
         /** Context for distance computation */
