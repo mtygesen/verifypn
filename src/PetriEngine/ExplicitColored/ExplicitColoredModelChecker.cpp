@@ -270,8 +270,8 @@ namespace PetriEngine::ExplicitColored {
 
         auto net = cpnBuilder.takeNet();
 
-        ExplicitWorklist worklist(net, query, cpnBuilder.getPlaceIndices(), cpnBuilder.getTransitionIndices(), options.seed(), options.trace != TraceLevel::None);
-        bool result = worklist.check(options.strategy, options.colored_sucessor_generator);
+        ExplicitWorklist worklist(net, query, cpnBuilder.getPlaceIndices(), cpnBuilder.getTransitionIndices(), options.seed(), options.trace != TraceLevel::None, options.kbound);
+        const auto worklistResult = worklist.check(options.strategy, options.colored_sucessor_generator);
 
         if (searchStatistics) {
             *searchStatistics = worklist.GetSearchStatistics();
@@ -288,7 +288,12 @@ namespace PetriEngine::ExplicitColored {
                 }
             }
         }
-        return std::make_pair(result ? Result::SATISFIED : Result::UNSATISFIED, std::move(traceContext));
+        const auto result = worklistResult == AbstractHandler::Satisfied
+            ? Result::SATISFIED
+            : worklistResult == AbstractHandler::NotSatisfied
+                ? Result::UNSATISFIED
+                : Result::UNKNOWN;
+        return std::make_pair(result, std::move(traceContext));
     }
 
     void ExplicitColoredModelChecker::_reduce(
