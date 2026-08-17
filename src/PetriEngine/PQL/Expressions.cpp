@@ -326,9 +326,11 @@ namespace PetriEngine {
         uint32_t UnfoldedUpperBoundsCondition::distance(DistanceContext& context) const
         {
             size_t tmp = 0;
-            for(auto& p : _places)
-            {
-                tmp += context.marking()[p._place];
+            const auto offset = (context.net() && context.offset() > 0)
+                ? context.offset() * context.net()->numberOfPlaces()
+                : 0;
+            for (auto& p : _places) {
+                tmp += context.marking()[p._place + offset];
             }
 
             return _max - tmp;
@@ -382,11 +384,14 @@ namespace PetriEngine {
         uint32_t CompareConjunction::distance(DistanceContext& context) const {
             uint32_t d = 0;
             auto neg = context.negated() != _negated;
+            const auto offset = (context.net() && context.offset() > 0)
+                ? context.offset() * context.net()->numberOfPlaces()
+                : 0;
             if(!neg)
             {
                 for(auto& c : _constraints)
                 {
-                    auto pv = context.marking()[c._place];
+                    auto pv = context.marking()[c._place + offset];
                     d += (c._upper == std::numeric_limits<uint32_t>::max() ? 0 : delta<LessThanOrEqualCondition>(pv, c._upper, neg)) +
                          (c._lower == 0 ? 0 : delta<LessThanOrEqualCondition>(c._lower, pv, neg));
                 }
@@ -396,7 +401,7 @@ namespace PetriEngine {
                 bool first = true;
                 for(auto& c : _constraints)
                 {
-                    auto pv = context.marking()[c._place];
+                    auto pv = context.marking()[c._place + offset];
                     if(c._upper != std::numeric_limits<uint32_t>::max())
                     {
                         auto d2 = delta<LessThanOrEqualCondition>(pv, c._upper, neg);

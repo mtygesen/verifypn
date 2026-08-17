@@ -46,6 +46,20 @@ namespace PetriEngine { namespace PQL {
             return C::fail_hard_here;
     }
 
+    template<typename V>
+    Condition::Result eval_compare_conjunction(V* visitor, const CompareConjunction* element) {
+        bool res = true;
+        const auto offset = visitor->context().traces() > 1
+            ? visitor->offset() * visitor->context().net()->numberOfPlaces()
+            : 0;
+        for (auto &c: element->constraints()) {
+            res = res && visitor->context().marking()[c._place + offset] <= c._upper && visitor->context().marking()[c._place + offset] >= c._lower;
+            if (!res) break;
+        }
+        
+        return (element->isNegated() xor res) ? Condition::RTRUE : Condition::RFALSE;
+    }
+
     template<typename V, typename E>
     int64_t commutative(V* visitor, const E* element, const EvaluationContext& context) {
         int64_t r = element->constant();
@@ -249,12 +263,7 @@ namespace PetriEngine { namespace PQL {
     }
 
     void EvaluateVisitor::_accept(CompareConjunction *element) {
-        bool res = true;
-        for (auto &c: element->constraints()) {
-            res = res && _context.marking()[c._place] <= c._upper && _context.marking()[c._place] >= c._lower;
-            if (!res) break;
-        }
-        _return_value = {(element->isNegated() xor res) ? Condition::RTRUE : Condition::RFALSE};
+        _return_value = {eval_compare_conjunction(this, element)};
     }
 
     void EvaluateVisitor::_accept(LessThanOrEqualCondition *element) {
@@ -298,7 +307,10 @@ namespace PetriEngine { namespace PQL {
     }
 
     void EvaluateVisitor::_accept(UnfoldedUpperBoundsCondition *element) {
-        element->setUpperBound(element->value(_context.marking()));
+        const auto offset = (_context.traces() > 1 && _context.net())
+            ? _offset * _context.net()->numberOfPlaces()
+            : 0;
+        element->setUpperBound(element->value(_context.marking() + offset));
         _return_value = {element->getMax() <= element->getBound() ? Condition::RTRUE : Condition::RUNKNOWN};
     }
 
@@ -406,7 +418,7 @@ namespace PetriEngine { namespace PQL {
     }
 
     void EvaluateAndSetVisitor::_accept(CompareConjunction *element) {
-        auto res = evaluate(element, _context);
+        auto res = eval_compare_conjunction(this, element);
         element->setSatisfied(res);
         _return_value = {res};
     }
@@ -457,7 +469,11 @@ namespace PetriEngine { namespace PQL {
     }
 
     void EvaluateAndSetVisitor::_accept(UnfoldedUpperBoundsCondition *element) {
-        auto res = evaluate(element, _context);
+        const auto offset = (_context.traces() > 1 && _context.net())
+            ? _offset * _context.net()->numberOfPlaces()
+            : 0;
+        element->setUpperBound(element->value(_context.marking() + offset));
+        auto res = element->getMax() <= element->getBound() ? Condition::RTRUE : Condition::RUNKNOWN;
         element->setSatisfied(res);
         _return_value = {res};
     }

@@ -58,6 +58,7 @@ namespace PetriEngine { namespace PQL {
     public:
         Condition::Result get_return_value() { return _return_value; }
         const EvaluationContext& context() const { return _context; }
+        size_t offset() const { return _offset; }
     protected:
         explicit BaseEvaluationVisitor(const EvaluationContext& context) : _context(context) {}
 
@@ -75,7 +76,7 @@ namespace PetriEngine { namespace PQL {
     protected:
         const EvaluationContext& _context;
         Condition::Result _return_value = Condition::RUNKNOWN;
-        size_t _offset;
+        size_t _offset = 0;
     };
 
     int64_t evaluate(Expr *element, const EvaluationContext& context);

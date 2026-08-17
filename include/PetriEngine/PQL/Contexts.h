@@ -126,7 +126,7 @@ namespace PetriEngine {
             EvaluationContext() {};
 
             const MarkVal* marking() const {
-                return &_marking[_offset];
+                return _marking;
             }
 
             void setMarking(MarkVal* marking) {
@@ -135,6 +135,10 @@ namespace PetriEngine {
 
             const PetriNet* net() const {
                 return _net;
+            }
+
+            size_t offset() const {
+                return _offset;
             }
 
             void set_offset(size_t i) {
