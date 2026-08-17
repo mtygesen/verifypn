@@ -47,6 +47,7 @@ namespace PetriEngine { namespace PQL {
         virtual void _accept(const PathSelectExpr *element) override final;
 
         int64_t value() const { return _value; }
+        size_t offset() const { return _offset; }
     protected:
         const EvaluationContext& _context;
         int64_t _value = 0;

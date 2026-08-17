@@ -49,12 +49,15 @@ namespace PetriEngine { namespace PQL {
     template<typename V, typename E>
     int64_t commutative(V* visitor, const E* element, const EvaluationContext& context) {
         int64_t r = element->constant();
+        const auto offset = context.traces() > 1
+            ? visitor->offset() * context.net()->numberOfPlaces()
+            : 0;
         for(auto& i : element->places())
         {
             if constexpr (std::is_same<E, PlusExpr>::value)
-                r += context.marking()[i.first];
+                r += context.marking()[i.first + offset];
             else if constexpr (std::is_same<E, MultiplyExpr>::value)
-                r *= context.marking()[i.first];
+                r *= context.marking()[i.first + offset];
             else
                 E::fail_hard_here;
         }
