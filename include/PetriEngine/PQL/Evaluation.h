@@ -29,7 +29,7 @@ namespace PetriEngine { namespace PQL {
 
     class ExprEvalVisitor : public ExpressionVisitor {
     public:
-        explicit ExprEvalVisitor(const EvaluationContext& context) : _context(context) {}
+        explicit ExprEvalVisitor(const EvaluationContext& context, size_t offset = 0) : _context(context), _offset(offset) {}
         virtual void _accept(const PlusExpr *element) override final;
 
         virtual void _accept(const MultiplyExpr *element) override final;

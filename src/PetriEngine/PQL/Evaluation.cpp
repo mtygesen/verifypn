@@ -25,7 +25,7 @@ namespace PetriEngine { namespace PQL {
     template<typename V, typename C>
     bool compare(V* visitor, C* condition)
     {
-        ExprEvalVisitor eval(visitor->context());
+        ExprEvalVisitor eval(visitor->context(), visitor->offset());
         Visitor::visit(eval, (*condition)[0]);
 
         auto v1 = eval.value();
@@ -300,7 +300,10 @@ namespace PetriEngine { namespace PQL {
     }
 
     void EvaluateVisitor::_accept(DeadlockCondition *element) {
-        if (!_context.net() || !_context.net()->deadlocked(_context.marking()))
+        const auto offset = (_context.traces() > 1 && _context.net())
+            ? _offset * _context.net()->numberOfPlaces()
+            : 0;
+        if (!_context.net() || !_context.net()->deadlocked(_context.marking() + offset))
             _return_value = {Condition::RFALSE};
         else
             _return_value = {Condition::RTRUE};
@@ -463,7 +466,10 @@ namespace PetriEngine { namespace PQL {
         if (!_context.net()) {
             _return_value = {Condition::RFALSE};
         } else {
-            element->setSatisfied(_context.net()->deadlocked(_context.marking()));
+            const auto offset = (_context.traces() > 1 && _context.net())
+                ? _offset * _context.net()->numberOfPlaces()
+                : 0;
+            element->setSatisfied(_context.net()->deadlocked(_context.marking() + offset));
             _return_value = {element->isSatisfied() ? Condition::RTRUE : Condition::RFALSE};
         }
     }
