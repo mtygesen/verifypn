@@ -48,6 +48,8 @@ namespace PetriEngine { namespace PQL {
 
         int64_t value() const { return _value; }
         size_t offset() const { return _offset; }
+        const MarkVal* marking() const { return _context.marking(_offset); }
+        MarkVal tokens(size_t place) const { return _context.tokens(place, _offset); }
     protected:
         const EvaluationContext& _context;
         int64_t _value = 0;
@@ -59,6 +61,8 @@ namespace PetriEngine { namespace PQL {
         Condition::Result get_return_value() { return _return_value; }
         const EvaluationContext& context() const { return _context; }
         size_t offset() const { return _offset; }
+        const MarkVal* marking() const { return _context.marking(_offset); }
+        MarkVal tokens(size_t place) const { return _context.tokens(place, _offset); }
     protected:
         explicit BaseEvaluationVisitor(const EvaluationContext& context) : _context(context) {}
 

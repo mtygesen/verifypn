@@ -125,8 +125,22 @@ namespace PetriEngine {
 
             EvaluationContext() {};
 
+            const MarkVal* marking(size_t trace) const {
+                if (!_marking) return nullptr;
+                const size_t place_offset = (_traces > 1 && _net) ? trace * _net->numberOfPlaces() : 0;
+                return _marking + place_offset;
+            }
+
             const MarkVal* marking() const {
-                return _marking;
+                return marking(_offset);
+            }
+
+            MarkVal tokens(size_t place, size_t trace) const {
+                return marking(trace)[place];
+            }
+
+            MarkVal tokens(size_t place) const {
+                return marking(_offset)[place];
             }
 
             void setMarking(MarkVal* marking) {
