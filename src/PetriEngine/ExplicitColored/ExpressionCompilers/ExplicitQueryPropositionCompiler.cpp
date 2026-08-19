@@ -1,5 +1,6 @@
 #include "PetriEngine/ExplicitColored/ExpressionCompilers/ExplicitQueryPropositionCompiler.h"
 #include <charconv>
+#include <functional>
 #include <numeric>
 #include "PetriEngine/ExplicitColored/FireabilityChecker.h"
 #include "PetriEngine/PQL/Visitor.h"
@@ -109,43 +110,75 @@ namespace PetriEngine::ExplicitColored {
             const std::unordered_map<std::string, uint32_t>& placeNameIndices,
             const ColoredPetriNet& net
         ) {
-            QueryValue value;
             switch (expression.type()) {
                 case PQL::type_id<PQL::LiteralExpr>(): {
                     const auto& literalExpression = static_cast<const PQL::LiteralExpr&>(expression);
-                    value._constant = literalExpression.value();
-                    return value;
+                    return QueryValue{[value = literalExpression.value()](const auto&) { return value; }};
                 }
                 case PQL::type_id<PQL::IdentifierExpr>(): {
                     const auto& identifierExpression = static_cast<const PQL::IdentifierExpr&>(expression);
-                    const auto placeIndex = placeNameIndices.find(*identifierExpression.name());
-                    if (placeIndex == placeNameIndices.end()) {
-                        throw base_error("Unknown place '", *identifierExpression.name(), "'");
-                    }
-
-                    value._places.emplace_back(placeIndex->second, ALL_COLOR);
-                    
-                    return value;
+                    return placeValue(*identifierExpression.name(), placeNameIndices, net);
                 }
                 case PQL::type_id<PQL::UnfoldedIdentifierExpr>(): {
                     const auto& identifierExpression = static_cast<const PQL::UnfoldedIdentifierExpr&>(expression);
-                    value.addColoredPlace(*identifierExpression.name(), placeNameIndices, net);
-                    return value;
+                    return placeValue(*identifierExpression.name(), placeNameIndices, net);
                 }
                 case PQL::type_id<PQL::PlusExpr>(): {
                     const auto& plusExpression = static_cast<const PQL::PlusExpr&>(expression);
-                    value._constant = plusExpression.constant();
+                    std::vector<QueryValue> values;
                     for (const auto& [_, name] : plusExpression.places()) {
-                        value.addColoredPlace(*name, placeNameIndices, net);
+                        values.push_back(placeValue(*name, placeNameIndices, net));
                     }
 
                     for (const auto& child : plusExpression.expressions()) {
-                        auto childValue = fromExpression(*child, placeNameIndices, net);
-                        value._constant += childValue._constant;
-                        value._places.insert(value._places.end(), childValue._places.begin(), childValue._places.end());
+                        values.push_back(fromExpression(*child, placeNameIndices, net));
                     }
 
-                    return value;
+                    return QueryValue{[constant = plusExpression.constant(), values = std::move(values)](const auto& marking) {
+                        auto result = constant;
+                        for (const auto& value : values) result += value.getCount(marking);
+                        return result;
+                    }};
+                }
+                case PQL::type_id<PQL::SubtractExpr>(): {
+                    const auto& subtractExpression = static_cast<const PQL::SubtractExpr&>(expression);
+                    if (subtractExpression.operands() == 0) {
+                        throw base_error("Invalid subtraction expression");
+                    }
+
+                    std::vector<QueryValue> values;
+                    values.push_back(fromExpression(*subtractExpression[0], placeNameIndices, net));
+                    for (size_t i = 1; i < subtractExpression.operands(); ++i) {
+                        values.push_back(fromExpression(*subtractExpression[i], placeNameIndices, net));
+                    }
+
+                    return QueryValue{[values = std::move(values)](const auto& marking) {
+                        auto result = values[0].getCount(marking);
+                        for (size_t i = 1; i < values.size(); ++i) result -= values[i].getCount(marking);
+                        return result;
+                    }};
+                }
+                case PQL::type_id<PQL::MinusExpr>(): {
+                    const auto& minusExpression = static_cast<const PQL::MinusExpr&>(expression);
+                    auto value = fromExpression(*minusExpression[0], placeNameIndices, net);
+                    return QueryValue{[value = std::move(value)](const auto& marking) { return -value.getCount(marking); }};
+                }
+                case PQL::type_id<PQL::MultiplyExpr>(): {
+                    const auto& multiplyExpression = static_cast<const PQL::MultiplyExpr&>(expression);
+                    std::vector<QueryValue> values;
+                    for (const auto& [_, name] : multiplyExpression.places()) {
+                        values.push_back(placeValue(*name, placeNameIndices, net));
+                    }
+
+                    for (const auto& child : multiplyExpression.expressions()) {
+                        values.push_back(fromExpression(*child, placeNameIndices, net));
+                    }
+
+                    return QueryValue{[constant = multiplyExpression.constant(), values = std::move(values)](const auto& marking) {
+                        auto result = constant;
+                        for (const auto& value : values) result *= value.getCount(marking);
+                        return result;
+                    }};
                 }
                 default:
                     throw base_error("Invalid expression type");
@@ -153,28 +186,23 @@ namespace PetriEngine::ExplicitColored {
         }
 
         [[nodiscard]] int64_t getCount(const ColoredPetriNetMarking& marking) const {
-            auto count = _constant;
-            for (const auto& place : _places) {
-                count += place.color != ALL_COLOR
-                    ? marking.markings[place.place].getCount(ColorSequence{place.color})
-                    : marking.getPlaceCount(place.place);
-            }
-
-            return count;
+            return _evaluate(marking);
         }
     private:
-        struct PlaceValue {
-            PlaceValue(Place_t place, Color_t color) : place(place), color(color) {}
-            Place_t place;
-            Color_t color;
-        };
+        using Evaluator = std::function<int64_t(const ColoredPetriNetMarking&)>;
 
-        void addColoredPlace(const std::string& name,
-                             const std::unordered_map<std::string, uint32_t>& placeNameIndices,
-                             const ColoredPetriNet& net) {
+        explicit QueryValue(Evaluator evaluate) : _evaluate(std::move(evaluate)) {}
+
+        static QueryValue placeValue(const std::string& name,
+                                     const std::unordered_map<std::string, uint32_t>& placeNameIndices,
+                                     const ColoredPetriNet& net) {
+            if (const auto place = placeNameIndices.find(name); place != placeNameIndices.end()) {
+                return QueryValue{[place = place->second](const auto& marking) { return marking.getPlaceCount(place); }};
+            }
+
             const auto separator = name.rfind('_');
             if (separator == std::string::npos) {
-                throw base_error("Unknown colored place '", name, "'");
+                throw base_error("Unknown place '", name, "'");
             }
 
             const auto place = placeNameIndices.find(name.substr(0, separator));
@@ -197,11 +225,13 @@ namespace PetriEngine::ExplicitColored {
                 colorId /= size;
             }
 
-            _places.emplace_back(place->second, static_cast<Color_t>(ColorSequence{colorSequence, colorType}.encodedValue));
+            const auto color = static_cast<Color_t>(ColorSequence{colorSequence, colorType}.encodedValue);
+            return QueryValue{[place = place->second, color](const auto& marking) {
+                return marking.markings[place].getCount(ColorSequence{color});
+            }};
         }
 
-        int64_t _constant = 0;
-        std::vector<PlaceValue> _places;
+        Evaluator _evaluate;
     };
 
     class GammaQueryLessThanExpression final : public ExplicitQueryProposition {
