@@ -48,3 +48,8 @@ BOOST_AUTO_TEST_CASE(KBound, * utf::timeout(5)) {
                          "FORMULA Ten voting tokens are reachable FALSE");
     test_explicit_engine("referendum_colored_subtraction", ExplicitColoredModelChecker::Result::SATISFIED, 1, 10);
 }
+
+BOOST_AUTO_TEST_CASE(ColorSensitiveInhibitor, * utf::timeout(5)) {
+    test_explicit_engine("color_sensitive_inhibitor", ExplicitColoredModelChecker::Result::SATISFIED);
+    test_explicit_engine("color_sensitive_inhibitor", ExplicitColoredModelChecker::Result::UNSATISFIED, 1);
+}
