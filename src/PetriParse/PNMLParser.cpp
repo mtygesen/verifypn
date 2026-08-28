@@ -24,16 +24,35 @@
 #include <iostream>
 #include <limits>
 #include <cstring>
+#include <stdexcept>
 
 
 #include "PetriParse/PNMLParser.h"
 #include "utils/errors.h"
 #include "PetriEngine/Colored/EvaluationVisitor.h"
 #include "PetriEngine/Colored/ConstantVisitor.h"
+#include "PetriEngine/Colored/VariableVisitor.h"
 
 using namespace PetriEngine;
 using namespace PetriEngine::PQL;
 using namespace PetriEngine::Colored;
+
+namespace {
+void validateGuard(const Colored::GuardExpression_ptr& guard) {
+    std::set<const Colored::Variable*> variables;
+    Colored::VariableVisitor::get_variables(*guard, variables);
+    if (variables.empty()) {
+        throw base_error("Illegal guard: There must be at least one variable in the guard expression.");
+    }
+
+    const auto* type = (*variables.begin())->colorType;
+    for (const auto* variable : variables) {
+        if (variable->colorType->getName() != type->getName()) {
+            throw base_error("Illegal guard: All variables in a guard expression must have the same color type.");
+        }
+    }
+}
+}
 
 void PNMLParser::parse(std::istream& xml,
         AbstractPetriNetBuilder* builder) {
@@ -78,6 +97,10 @@ void PNMLParser::parse(std::istream& xml,
         if (!isColored) {
             builder->addTransition(transition.id, transition._player, transition.x, transition.y);
         } else {
+            if (transition.expr != nullptr) {
+                validateGuard(transition.expr);
+            }
+
             builder->addTransition(transition.id, transition.expr, transition._player, transition.x, transition.y);
         }
 
