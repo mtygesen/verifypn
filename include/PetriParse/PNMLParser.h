@@ -92,8 +92,11 @@ private:
     void parsePartitions(rapidxml::xml_node<>* element);
     void parseNamedSort(rapidxml::xml_node<>* element);
     PetriEngine::Colored::ArcExpression_ptr parseArcExpression(rapidxml::xml_node<>* element);
-    PetriEngine::Colored::GuardExpression_ptr parseGuardExpression(rapidxml::xml_node<>* element, bool notFlag);
-    std::vector<PetriEngine::Colored::ColorExpression_ptr> parseColorExpression(rapidxml::xml_node<>* element);
+    PetriEngine::Colored::GuardExpression_ptr parseGuardExpression(rapidxml::xml_node<>* element, bool notFlag,
+        const PetriEngine::Colored::ColorType* type = nullptr);
+    std::vector<PetriEngine::Colored::ColorExpression_ptr> parseColorExpression(rapidxml::xml_node<>* element,
+        const PetriEngine::Colored::ColorType* type = nullptr);
+    const PetriEngine::Colored::ColorType* inferGuardColorType(rapidxml::xml_node<>* element) const;
     PetriEngine::Colored::AllExpression_ptr parseAllExpression(rapidxml::xml_node<>* element);
     const PetriEngine::Colored::ColorType* parseUserSort(rapidxml::xml_node<>* element);
     PetriEngine::Colored::ArcExpression_ptr parseNumberOfExpression(rapidxml::xml_node<>* element);
