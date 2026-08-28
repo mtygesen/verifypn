@@ -61,6 +61,7 @@ void PNMLParser::parse(std::istream& xml,
     arcs.clear();
     _transitions.clear();
     colorTypes.clear();
+    placeColorTypes.clear();
     placeTypeContext = "";
     hasPartition = false;
 
@@ -261,35 +262,35 @@ void PNMLParser::parseNamedSort(rapidxml::xml_node<>* element) {
     builder->addColorType(id, fct);
 }
 
-ArcExpression_ptr PNMLParser::parseArcExpression(rapidxml::xml_node<>* element) {
+ArcExpression_ptr PNMLParser::parseArcExpression(rapidxml::xml_node<>* element, const ColorType* type) {
     if (strcmp(element->name(), "numberof") == 0) {
-        return parseNumberOfExpression(element);
+        return parseNumberOfExpression(element, type);
     } else if (strcmp(element->name(), "add") == 0) {
         std::vector<ArcExpression_ptr> constituents;
         for (auto it = element->first_node(); it; it = it->next_sibling()) {
-            constituents.push_back(parseArcExpression(it));
+            constituents.push_back(parseArcExpression(it, type));
         }
         return std::make_shared<AddExpression>(std::move(constituents));
     } else if (strcmp(element->name(), "subtract") == 0) {
         auto left = element->first_node();
         auto right = left->next_sibling();
-        auto res = std::make_shared<SubtractExpression>(parseArcExpression(left), parseArcExpression(right));
+        auto res = std::make_shared<SubtractExpression>(parseArcExpression(left, type), parseArcExpression(right, type));
         auto next = right;
         while ((next = next->next_sibling())) {
-            res = std::make_shared<SubtractExpression>(res, parseArcExpression(next));
+            res = std::make_shared<SubtractExpression>(res, parseArcExpression(next, type));
         }
         return res;
     } else if (strcmp(element->name(), "scalarproduct") == 0) {
         auto scalar = element->first_node();
         auto ms = scalar->next_sibling();
-        return std::make_shared<ScalarProductExpression>(parseArcExpression(ms), parseNumberConstant(scalar));
+        return std::make_shared<ScalarProductExpression>(parseArcExpression(ms, type), parseNumberConstant(scalar));
     } else if (strcmp(element->name(), "all") == 0) {
-        return parseNumberOfExpression(element->parent());
+        return parseNumberOfExpression(element->parent(), type);
     } else if (strcmp(element->name(), "subterm") == 0 || strcmp(element->name(), "structure") == 0) {
-        return parseArcExpression(element->first_node());
+        return parseArcExpression(element->first_node(), type);
     } else if (strcmp(element->name(), "tuple") == 0) {
         std::vector<std::vector < ColorExpression_ptr>> collectedColors;
-        collectColorsInTuple(element, collectedColors);
+        collectColorsInTuple(element, collectedColors, type);
         auto expr = constructAddExpressionFromTupleExpression(element, collectedColors, 1);
         return expr;
     }
@@ -346,10 +347,29 @@ std::vector<std::vector<ColorExpression_ptr>> PNMLParser::cartesianProduct(std::
     return returnSet;
 }
 
-void PNMLParser::collectColorsInTuple(rapidxml::xml_node<>* element, std::vector<std::vector<ColorExpression_ptr>>&collectedColors) {
+void PNMLParser::collectColorsInTuple(rapidxml::xml_node<>* element,
+    std::vector<std::vector<ColorExpression_ptr>>& collectedColors, const ColorType* type) {
     if (strcmp(element->name(), "tuple") == 0) {
+        if (type == nullptr || !type->isProduct()) {
+            auto* child = element->first_node();
+            if (type == nullptr || child == nullptr || child->next_sibling() != nullptr) {
+                throw base_error("Tuple expression used for non-product place color type.");
+            }
+            collectColorsInTuple(child->first_node(), collectedColors, type);
+            return;
+        }
+        const auto* productType = static_cast<const ProductType*>(type);
+        size_t index = 0;
         for (auto it = element->first_node(); it; it = it->next_sibling()) {
-            collectColorsInTuple(it->first_node(), collectedColors);
+            if (index >= productType->getConstituentsSizes().size()) {
+                throw base_error("Tuple has too many components for place color type.");
+            }
+            const auto* constituentType = productType->getNestedColorType(index);
+            collectColorsInTuple(it->first_node(), collectedColors, constituentType);
+            ++index;
+        }
+        if (index != productType->getConstituentsSizes().size()) {
+            throw base_error("Tuple has too few components for place color type.");
         }
     } else if (strcmp(element->name(), "all") == 0) {
         std::vector<ColorExpression_ptr> expressionsToAdd;
@@ -365,7 +385,7 @@ void PNMLParser::collectColorsInTuple(rapidxml::xml_node<>* element, std::vector
         std::vector<std::vector < ColorExpression_ptr>> intermediateColors;
         std::vector<std::vector < ColorExpression_ptr>> intermediateColors2;
         for (auto it = element->first_node(); it; it = it->next_sibling()) {
-            collectColorsInTuple(it, intermediateColors2);
+            collectColorsInTuple(it, intermediateColors2, type);
             if (intermediateColors.empty()) {
                 intermediateColors = intermediateColors2;
             } else {
@@ -378,20 +398,17 @@ void PNMLParser::collectColorsInTuple(rapidxml::xml_node<>* element, std::vector
             collectedColors.push_back(std::move(colorVec));
         }
     } else if (strcmp(element->name(), "subterm") == 0 || strcmp(element->name(), "structure") == 0) {
-        collectColorsInTuple(element->first_node(), collectedColors);
+        collectColorsInTuple(element->first_node(), collectedColors, type);
     } else if (strcmp(element->name(), "finiteintrangeconstant") == 0) {
         std::vector<ColorExpression_ptr> expressionsToAdd;
-        auto value = element->first_attribute("value")->value();
-        auto intRangeElement = element->first_node("finiteintrange");
-        const char* start = intRangeElement->first_attribute("start")->value();
-        const char* end = intRangeElement->first_attribute("end")->value();
-        expressionsToAdd.push_back(std::make_shared<UserOperatorExpression>(findColorForIntRange(value, start, end)));
+        auto colors = parseColorExpression(element, type);
+        expressionsToAdd.insert(expressionsToAdd.end(), colors.begin(), colors.end());
         collectedColors.push_back(expressionsToAdd);
     } else if (strcmp(element->name(), "useroperator") == 0 || strcmp(element->name(), "dotconstant") == 0 || strcmp(element->name(), "variable") == 0
             || strcmp(element->name(), "successor") == 0 || strcmp(element->name(), "predecessor") == 0) {
         std::vector<ColorExpression_ptr> expressionsToAdd = findPartitionColors(element);
         if (expressionsToAdd.empty()) {
-            auto colors = parseColorExpression(element);
+            auto colors = parseColorExpression(element, type);
             assert(colors.size() == 1);
             expressionsToAdd.insert(expressionsToAdd.end(), colors.begin(), colors.end());
         }
@@ -493,7 +510,10 @@ GuardExpression_ptr PNMLParser::parseGuardExpression(rapidxml::xml_node<>* eleme
 
 const ColorType* PNMLParser::inferGuardColorType(rapidxml::xml_node<>* element) const {
     const ColorType* type = nullptr;
-    for (auto node = element; node; node = node->next_sibling()) {
+    std::vector<rapidxml::xml_node<>*> pending {element};
+    while (!pending.empty()) {
+        auto* node = pending.back();
+        pending.pop_back();
         if (strcmp(node->name(), "variable") == 0) {
             auto variable = variables.find(node->first_attribute("refvariable")->value());
             if (variable == variables.end()) {
@@ -507,15 +527,8 @@ const ColorType* PNMLParser::inferGuardColorType(rapidxml::xml_node<>* element) 
             type = variable->second->colorType;
         }
 
-        if (node->first_node() != nullptr) {
-            const auto* childType = inferGuardColorType(node->first_node());
-            if (childType != nullptr) {
-                if (type != nullptr && type->getName() != childType->getName()) {
-                    throw base_error("Illegal guard: All variables in a guard expression must have the same color type.");
-                }
-
-                type = childType;
-            }
+        for (auto* child = node->first_node(); child; child = child->next_sibling()) {
+            pending.push_back(child);
         }
     }
 
@@ -530,11 +543,19 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
     if (strcmp(element->name(), "dotconstant") == 0) {
         return {std::make_shared<DotConstantExpression>()};
     } else if (strcmp(element->name(), "variable") == 0) {
-        return {std::make_shared<VariableExpression>(variables[element->first_attribute("refvariable")->value()])};
+        const auto* variable = variables[element->first_attribute("refvariable")->value()];
+        if (type != nullptr && variable->colorType->getName() != type->getName()) {
+            throw base_error("Variable does not belong to the expected color type.");
+        }
+        return {std::make_shared<VariableExpression>(variable)};
     } else if (strcmp(element->name(), "useroperator") == 0) {
         const auto* color = type == nullptr
             ? findColor(element->first_attribute("declaration")->value())
             : (*type)[element->first_attribute("declaration")->value()];
+        if (color == nullptr) {
+            throw base_error("Illegal guard: Constant does not belong to the guard variable color type.");
+        }
+
         return {std::make_shared<UserOperatorExpression>(color)};
     } else if (strcmp(element->name(), "successor") == 0) {
         auto expr = parseColorExpression(element->first_node(), type);
@@ -551,23 +572,47 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
         auto intRangeElement = element->first_node("finiteintrange");
         const char* start = intRangeElement->first_attribute("start")->value();
         const char* end = intRangeElement->first_attribute("end")->value();
-        if (type != nullptr && type->size() == static_cast<size_t>(atoi(end) - atoi(start)) + 1 &&
+        const auto numericValue = atoi(value);
+        const auto numericStart = atoi(start);
+        const auto numericEnd = atoi(end);
+        if (type != nullptr && numericValue >= numericStart && numericValue <= numericEnd &&
+            type->size() == static_cast<size_t>(numericEnd - numericStart) + 1 &&
             type->begin()->getColorName() == start) {
-            const auto index = static_cast<size_t>(atoi(value) - atoi(start));
+            const auto index = static_cast<size_t>(numericValue - numericStart);
             return {std::make_shared<UserOperatorExpression>(&(*type)[index])};
         }
 
         if (type != nullptr) {
             throw base_error("Illegal guard: Constant does not belong to the guard variable color type.");
         }
-        
+
         return {std::make_shared<UserOperatorExpression>(findColorForIntRange(value, start, end))};
 
     } else if (strcmp(element->name(), "tuple") == 0) {
         std::vector<std::vector<ColorExpression_ptr>> products;
-        for (auto it = element->first_node(); it; it = it->next_sibling()) {
-            products.emplace_back(parseColorExpression(it, type));
+        if (type == nullptr || !type->isProduct()) {
+            auto* child = element->first_node();
+            if (type == nullptr || child == nullptr || child->next_sibling() != nullptr) {
+                throw base_error("Illegal guard: Tuple expression used for non-product guard variable color type.");
+            }
+            return parseColorExpression(child, type);
         }
+        const auto* productType = static_cast<const ProductType*>(type);
+        size_t index = 0;
+        for (auto it = element->first_node(); it; it = it->next_sibling()) {
+            if (index >= productType->getConstituentsSizes().size()) {
+                throw base_error("Illegal guard: Tuple has too many components for the guard variable color type.");
+            }
+
+            const auto* constituentType = productType->getNestedColorType(index);
+            products.emplace_back(parseColorExpression(it, constituentType));
+            ++index;
+        }
+
+        if (index != productType->getConstituentsSizes().size()) {
+            throw base_error("Illegal guard: Tuple has too few components for the guard variable color type.");
+        }
+
         std::vector<ColorExpression_ptr> result;
         std::vector<size_t> indexes(products.size(), 0);
 
@@ -625,7 +670,7 @@ const ColorType* PNMLParser::parseUserSort(rapidxml::xml_node<>* element) {
     return nullptr;
 }
 
-ArcExpression_ptr PNMLParser::parseNumberOfExpression(rapidxml::xml_node<>* element) {
+ArcExpression_ptr PNMLParser::parseNumberOfExpression(rapidxml::xml_node<>* element, const ColorType* type) {
     auto num = element->first_node();
     uint32_t number = parseNumberConstant(num);
     rapidxml::xml_node<>* first;
@@ -638,7 +683,7 @@ ArcExpression_ptr PNMLParser::parseNumberOfExpression(rapidxml::xml_node<>* elem
     
     std::vector<std::vector<ColorExpression_ptr>> constituents;
     for (auto it = first; it; it = it->next_sibling()) {
-        constituents.emplace_back(parseColorExpression(it));
+        constituents.emplace_back(parseColorExpression(it, type));
     }
     // do all possible subsets
     std::vector<ArcExpression_ptr> result;
@@ -756,6 +801,11 @@ void PNMLParser::parsePlace(rapidxml::xml_node<>* element) {
     if(initial)
          initialMarking = atoll(initial->value());
 
+    for (auto it = element->first_node("type"); it != nullptr; it = it->next_sibling("type")) {
+        type = parseUserSort(it);
+        break;
+    }
+
     for (auto it = element->first_node(); it; it = it->next_sibling()) {
         // name element is ignored
         if (strcmp(it->name(), "graphics") == 0) {
@@ -768,10 +818,9 @@ void PNMLParser::parsePlace(rapidxml::xml_node<>* element) {
             std::unordered_map<const Variable*, const Color*> binding;
             EquivalenceVec placePartition;
 			ExpressionContext context {binding, colorTypes, placePartition};
-            auto ae = parseArcExpression(it->first_node("structure"));
+            auto ae = parseArcExpression(it->first_node("structure"), type);
             hlinitialMarking = EvaluationVisitor::evaluate(*ae, context);
         } else if (strcmp(it->name(), "type") == 0) {
-            type = parseUserSort(it);
             placeTypeContext = type->getName();
 
         }
@@ -798,6 +847,7 @@ void PNMLParser::parsePlace(rapidxml::xml_node<>* element) {
     nn.id = id;
     nn.isPlace = true;
     id2name[id] = nn;
+    placeColorTypes[id] = type;
     placeTypeContext = "";
 }
 
@@ -839,9 +889,17 @@ void PNMLParser::parseArc(rapidxml::xml_node<>* element, bool inhibitor) {
     }
 
     ArcExpression_ptr expr;
+    auto place = placeColorTypes.find(source);
+    if (place == placeColorTypes.end()) {
+        place = placeColorTypes.find(target);
+    }
+    if (isColored && place == placeColorTypes.end()) {
+        throw base_error("Could not resolve the color type of arc from ", source, " to ", target, ".");
+    }
+    const auto* placeType = place == placeColorTypes.end() ? nullptr : place->second;
     first = true;
     for (auto it = element->first_node("hlinscription"); it; it = it->next_sibling("hlinscription")) {
-        expr = parseArcExpression(it->first_node("structure"));
+        expr = parseArcExpression(it->first_node("structure"), placeType);
         if(!first)
         {
             throw base_error("Multiple hlinscription tags in xml of a arc from ", source, " to ", target, ".");
