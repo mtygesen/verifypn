@@ -114,3 +114,8 @@ BOOST_AUTO_TEST_CASE(ColoredQueryUsesExplicitTupleEncoding) {
     const auto proposition = compiler.compile(query);
     BOOST_TEST(proposition->eval(successorGenerator, net.initial(), 0));
 }
+
+BOOST_AUTO_TEST_CASE(ColorSensitiveInhibitor, * utf::timeout(5)) {
+    test_explicit_engine("color_sensitive_inhibitor", ExplicitColoredModelChecker::Result::SATISFIED);
+    test_explicit_engine("color_sensitive_inhibitor", ExplicitColoredModelChecker::Result::UNSATISFIED, 1);
+}

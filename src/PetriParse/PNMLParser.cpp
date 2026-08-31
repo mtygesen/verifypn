@@ -54,6 +54,17 @@ void validateGuard(const Colored::GuardExpression_ptr& guard) {
 }
 }
 
+namespace {
+bool containsAllExpression(rapidxml::xml_node<>* node) {
+    if (node == nullptr) return false;
+    if (strcmp(node->name(), "all") == 0) return true;
+    for (auto child = node->first_node(); child; child = child->next_sibling()) {
+        if (containsAllExpression(child)) return true;
+    }
+    return false;
+}
+}
+
 void PNMLParser::parse(std::istream& xml,
         AbstractPetriNetBuilder* builder) {
     //Clear any left overs
@@ -914,8 +925,7 @@ void PNMLParser::parseArc(rapidxml::xml_node<>* element, bool inhibitor) {
     arc.target = target;
     arc.weight = weight;
     arc.inhib = inhibitor;
-    if(!inhibitor)
-        arc.expr = expr;
+    arc.expr = inhibitor && containsAllExpression(element) ? nullptr : expr;
     assert(weight > 0);
 
     if(weight != 0)
