@@ -31,28 +31,10 @@
 #include "utils/errors.h"
 #include "PetriEngine/Colored/EvaluationVisitor.h"
 #include "PetriEngine/Colored/ConstantVisitor.h"
-#include "PetriEngine/Colored/VariableVisitor.h"
 
 using namespace PetriEngine;
 using namespace PetriEngine::PQL;
 using namespace PetriEngine::Colored;
-
-namespace {
-void validateGuard(const Colored::GuardExpression_ptr& guard) {
-    std::set<const Colored::Variable*> variables;
-    Colored::VariableVisitor::get_variables(*guard, variables);
-    if (variables.empty()) {
-        throw base_error("Illegal guard: There must be at least one variable in the guard expression.");
-    }
-
-    const auto* type = (*variables.begin())->colorType;
-    for (const auto* variable : variables) {
-        if (variable->colorType->getName() != type->getName()) {
-            throw base_error("Illegal guard: All variables in a guard expression must have the same color type.");
-        }
-    }
-}
-}
 
 namespace {
 bool containsAllExpression(rapidxml::xml_node<>* node) {
@@ -109,10 +91,6 @@ void PNMLParser::parse(std::istream& xml,
         if (!isColored) {
             builder->addTransition(transition.id, transition._player, transition.x, transition.y);
         } else {
-            if (transition.expr != nullptr) {
-                validateGuard(transition.expr);
-            }
-
             builder->addTransition(transition.id, transition.expr, transition._player, transition.x, transition.y);
         }
 
@@ -429,39 +407,39 @@ void PNMLParser::collectColorsInTuple(rapidxml::xml_node<>* element,
     }
 }
 
-GuardExpression_ptr PNMLParser::parseGuardExpression(rapidxml::xml_node<>* element, bool notFlag, const ColorType* type) {
+GuardExpression_ptr PNMLParser::parseGuardExpression(rapidxml::xml_node<>* element, bool notFlag) {
     if (strcmp(element->name(), "not") == 0) {
-        return parseGuardExpression(element->first_node(), true, type);
+        return parseGuardExpression(element->first_node(), true);
     }
     else if (strcmp(element->name(), "subterm") == 0 || strcmp(element->name(), "structure") == 0) {
-        return parseGuardExpression(element->first_node(), notFlag, type);
+        return parseGuardExpression(element->first_node(), notFlag);
     } else if (strcmp(element->name(), "and") == 0) {
         auto left = element->first_node();
         auto right = left->next_sibling();
         if (right == nullptr)
-            return parseGuardExpression(left, notFlag, type);
+            return parseGuardExpression(left, notFlag);
         if (notFlag) {
-            return std::make_shared<OrExpression>(parseGuardExpression(left, true, type), parseGuardExpression(right, true, type));
+            return std::make_shared<OrExpression>(parseGuardExpression(left, true), parseGuardExpression(right, true));
         } else {
-            return std::make_shared<AndExpression>(parseGuardExpression(left, false, type), parseGuardExpression(right, false, type));
+            return std::make_shared<AndExpression>(parseGuardExpression(left, false), parseGuardExpression(right, false));
         }
     } else if (strcmp(element->name(), "or") == 0) {
         auto left = element->first_node();
         auto right = left->next_sibling();
         //There must only be one constituent
         if (right == nullptr) {
-            return parseGuardExpression(left, notFlag, type);
+            return parseGuardExpression(left, notFlag);
         }
         if (notFlag) {
-            auto parentAnd = std::make_shared<AndExpression>(parseGuardExpression(left, true, type), parseGuardExpression(right, true, type));
+            auto parentAnd = std::make_shared<AndExpression>(parseGuardExpression(left, true), parseGuardExpression(right, true));
             for (auto it = right->next_sibling(); it; it = it->next_sibling()) {
-                parentAnd = std::make_shared<AndExpression>(parentAnd, parseGuardExpression(it, true, type));
+                parentAnd = std::make_shared<AndExpression>(parentAnd, parseGuardExpression(it, true));
             }
             return parentAnd;
         } else {
-            auto parentOr = std::make_shared<OrExpression>(parseGuardExpression(left, false, type), parseGuardExpression(right, false, type));
+            auto parentOr = std::make_shared<OrExpression>(parseGuardExpression(left, false), parseGuardExpression(right, false));
             for (auto it = right->next_sibling(); it; it = it->next_sibling()) {
-                parentOr = std::make_shared<OrExpression>(parentOr, parseGuardExpression(it, false, type));
+                parentOr = std::make_shared<OrExpression>(parentOr, parseGuardExpression(it, false));
             }
             return parentOr;
         }
@@ -470,8 +448,14 @@ GuardExpression_ptr PNMLParser::parseGuardExpression(rapidxml::xml_node<>* eleme
     {
         auto left = element->first_node();
         auto right = left->next_sibling();
-        auto lcv = parseColorExpression(left, type);
-        auto rcv = parseColorExpression(right, type);
+        const auto* leftType = inferGuardColorType(left);
+        const auto* rightType = inferGuardColorType(right);
+        if (leftType == nullptr && rightType == nullptr) {
+            throw base_error("Illegal guard: There must be at least one variable in each comparison.");
+        }
+        
+        auto lcv = parseColorExpression(left, leftType == nullptr ? rightType : leftType, false);
+        auto rcv = parseColorExpression(right, rightType == nullptr ? leftType : rightType, false);
         assert(lcv.size() == 1);
         assert(rcv.size() == 1);
         auto& lc = lcv[0];
@@ -531,11 +515,7 @@ const ColorType* PNMLParser::inferGuardColorType(rapidxml::xml_node<>* element) 
                 throw base_error("Illegal guard: Unknown variable in guard expression.");
             }
 
-            if (type != nullptr && type->getName() != variable->second->colorType->getName()) {
-                throw base_error("Illegal guard: All variables in a guard expression must have the same color type.");
-            }
-
-            type = variable->second->colorType;
+            if (type == nullptr) type = variable->second->colorType;
         }
 
         for (auto* child = node->first_node(); child; child = child->next_sibling()) {
@@ -543,14 +523,11 @@ const ColorType* PNMLParser::inferGuardColorType(rapidxml::xml_node<>* element) 
         }
     }
 
-    if (type == nullptr) {
-        throw base_error("Illegal guard: There must be at least one variable in the guard expression.");
-    }
-
     return type;
 }
 
-std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_node<>* element, const ColorType* type) {
+std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_node<>* element,
+    const ColorType* type, bool resolveNamedFromType) {
     if (strcmp(element->name(), "dotconstant") == 0) {
         return {std::make_shared<DotConstantExpression>()};
     } else if (strcmp(element->name(), "variable") == 0) {
@@ -560,7 +537,7 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
         }
         return {std::make_shared<VariableExpression>(variable)};
     } else if (strcmp(element->name(), "useroperator") == 0) {
-        const auto* color = type == nullptr
+        const auto* color = type == nullptr || !resolveNamedFromType
             ? findColor(element->first_attribute("declaration")->value())
             : (*type)[element->first_attribute("declaration")->value()];
         if (color == nullptr) {
@@ -569,12 +546,12 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
 
         return {std::make_shared<UserOperatorExpression>(color)};
     } else if (strcmp(element->name(), "successor") == 0) {
-        auto expr = parseColorExpression(element->first_node(), type);
+        auto expr = parseColorExpression(element->first_node(), type, resolveNamedFromType);
         for(auto& e : expr)
             e = std::make_shared<SuccessorExpression>(std::move(e));
         return expr;
     } else if (strcmp(element->name(), "predecessor") == 0) {
-        auto expr = parseColorExpression(element->first_node(), type);
+        auto expr = parseColorExpression(element->first_node(), type, resolveNamedFromType);
         for(auto& e : expr)
             e = std::make_shared<PredecessorExpression>(std::move(e));
         return expr;
@@ -606,7 +583,7 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
             if (type == nullptr || child == nullptr || child->next_sibling() != nullptr) {
                 throw base_error("Illegal guard: Tuple expression used for non-product guard variable color type.");
             }
-            return parseColorExpression(child, type);
+            return parseColorExpression(child, type, resolveNamedFromType);
         }
         const auto* productType = static_cast<const ProductType*>(type);
         size_t index = 0;
@@ -616,7 +593,7 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
             }
 
             const auto* constituentType = productType->getNestedColorType(index);
-            products.emplace_back(parseColorExpression(it, constituentType));
+            products.emplace_back(parseColorExpression(it, constituentType, resolveNamedFromType));
             ++index;
         }
 
@@ -643,7 +620,7 @@ std::vector<ColorExpression_ptr> PNMLParser::parseColorExpression(rapidxml::xml_
 
         return result;
     } else if (strcmp(element->name(), "subterm") == 0 || strcmp(element->name(), "structure") == 0) {
-        return parseColorExpression(element->first_node(), type);
+        return parseColorExpression(element->first_node(), type, resolveNamedFromType);
     } else if (strcmp(element->name(), "all") == 0) {
         auto* sort = parseUserSort(element);
         std::vector<ColorExpression_ptr> colors;
@@ -976,7 +953,7 @@ void PNMLParser::parseTransition(rapidxml::xml_node<>* element) {
             parsePosition(it, t.x, t.y);
         } else if (strcmp(it->name(), "condition") == 0) {
             auto structure = it->first_node("structure");
-            t.expr = parseGuardExpression(structure, false, inferGuardColorType(structure));
+            t.expr = parseGuardExpression(structure, false);
         } else if (strcmp(it->name(), "conditions") == 0) {
             throw base_error("conditions not supported");
         } else if (strcmp(it->name(), "assignments") == 0) {
